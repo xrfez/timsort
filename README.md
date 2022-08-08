@@ -2,8 +2,6 @@
 
 `nimble install timsort`
 
-![Github Actions](https://github.com/xrfez/timsort/workflows/Github%20Actions/badge.svg)
-
 This library has no dependencies other than the Nim standard library
 
 ## About
