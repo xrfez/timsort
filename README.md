@@ -1,6 +1,6 @@
 # timsort
 
-`nimble install benchy`
+`nimble install timsort`
 
 ![Github Actions](https://github.com/xrfez/timsort/workflows/Github%20Actions/badge.svg)
 
