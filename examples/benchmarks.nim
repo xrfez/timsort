@@ -1,4 +1,4 @@
-import benchy, random, algorithm, timsort
+import benchy, std/random, std/algorithm, timsort
 
 randomize(123)
 var arr1: seq[int]

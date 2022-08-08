@@ -9,7 +9,7 @@ import unittest
 
 import timsort
 
-import random, algorithm
+import std/[random, algorithm]
 
 include "sampleData/raw_2D_int.nim"
 include "sampleData/Ascending_2D_int_0.nim"
