@@ -7,112 +7,168 @@
 ##
 ##
 
+import std/algorithm
+export SortOrder
 
 const RUN: int = 32
 
-proc insertionSort[T](myRun: var openArray[T], left: int, right: int) =
-  for i in left + 1..right:
-    let temp = myRun[i]
-    var j = i - 1
-    while j >= left and myRun[j] > temp:
-      myRun[j+1] = myRun[j]
-      dec j
-    myRun[j+1] = temp
+const onlySafeCode = true
+
+template `<-`(a, b) =
+  when defined(gcDestructors):
+    a = move b
+  elif onlySafeCode:
+    shallowCopy(a, b)
+  else:
+    copyMem(addr(a), addr(b), sizeof(T))
+
+proc insertionSort[T](myRun: var openArray[T], left: int, right: int,
+    cmp: proc (x, y: T): int {.closure.}, order: SortOrder) =
+
+  var
+    j: int
+    temp: T
+
+  template comparison(body: untyped) =
+    for i in left + 1..right:
+      temp = myRun[i]
+      j = i - 1
+      while j >= left and body:
+        swap(myRun[j+1], myRun[j])
+        dec j
+
+  if cmp == system.cmp[T]:
+    # Dont use system.cmp because it is slower
+    case order:
+      of Ascending: comparison myRun[j] > temp
+      of Descending: comparison myRun[j] < temp
+  else:
+    # use custom cmp()
+    case order:
+      of Ascending: comparison cmp(myRun[j], temp) == 1
+      of Descending: comparison cmp(myRun[j], temp) == -1
 
 proc insertionSortIndex[T](myRun: var openArray[T], left: int, right: int,
+    cmp: proc (x, y: T): int {.closure.}, order: SortOrder,
     idx: var seq[int]) =
-  for i in left + 1..right:
-    let temp1 = myRun[i]
-    let temp2 = idx[i]
-    var j = i - 1
-    while j >= left and myRun[j] > temp1:
-      myRun[j+1] = myRun[j]
-      idx[j+1] = idx[j]
-      dec j
-    myRun[j+1] = temp1
-    idx[j+1] = temp2
-
-proc merge[T](myRun: var openArray[T], l, m, r: int) =
-  let
-    len1 = m - l + 1
-    len2 = r - m
-  var
-    left: seq[T]
-    right: seq[T]
-  for i in 0..<len1:
-    left.add myRun[l + i]
-  for i in 0..<len2:
-    right.add myRun[m + 1 + i]
 
   var
-    i = 0
-    j = 0
-    k = l
+    j: int
+    temp: T
+    #temp2: int
 
-  while i < len1 and j < len2:
-    if left[i] <= right[j]:
-      myRun[k] = left[i]
-      inc i
-    else:
-      myRun[k] = right[j]
-      inc j
-    inc k
+  template comparison(body: untyped) =
+    for i in left + 1..right:
+      temp = myRun[i]
+      #temp2 = idx[i]
+      j = i - 1
+      while j >= left and body:
+        swap(myRun[j+1], myRun[j])
+        swap(idx[j+1], idx[j])
+        dec j
 
-  while i < len1:
-    myRun[k] = left[i]
-    inc k
-    inc i
+  if cmp == system.cmp[T]:
+    # Dont use system.cmp because it is slower
+    case order:
+      of Ascending: comparison myRun[j] > temp
+      of Descending: comparison myRun[j] < temp
+  else:
+    # use custom cmp()
+    case order:
+      of Ascending: comparison cmp(myRun[j], temp) == 1
+      of Descending: comparison cmp(myRun[j], temp) == -1
 
-  while j < len2:
-    myRun[k] = right[j]
-    inc k
-    inc j
+proc merge[T](a, b: var openArray[T], lo, m, hi: int,
+              cmp: proc (x, y: T): int {.closure.},
+                  order: SortOrder) {.effectsOf: cmp.} =
+  # Optimization: If max(left) <= min(right) there is nothing to do!
+  if cmp(a[m], a[m+1]) * order <= 0: return
+  var j = lo
+  # copy a[j..m] into b:
+  assert j <= m
 
-proc mergeIndex[T](myRun: var openArray[T], l, m, r: int, idx: var seq[int]) =
-  let
-    len1 = m - l + 1
-    len2 = r - m
-  var
-    left: seq[T]
-    right: seq[T]
-    leftIdx: seq[int]
-    rightIdx: seq[int]
-  for i in 0..<len1:
-    left.add myRun[l + i]
-    leftIdx.add idx[l + i]
-  for i in 0..<len2:
-    right.add myRun[m + 1 + i]
-    rightIdx.add idx[m + 1 + i]
+  var bb = 0
+  while j <= m:
+    b[bb] <- a[j]
+    inc(bb)
+    inc(j)
+  var i = 0
+  var k = lo
 
-  var
-    i = 0
-    j = 0
-    k = l
+  # copy proper element back:
+  template comparison(body: untyped) =
+    while k < j and j <= hi:
+      if body:
+        a[k] <- b[i]
+        inc(i)
+      else:
+        a[k] <- a[j]
+        inc(j)
+      inc(k)
 
-  while i < len1 and j < len2:
-    if left[i] <= right[j]:
-      myRun[k] = left[i]
-      idx[k] = leftIdx[i]
-      inc i
-    else:
-      myRun[k] = right[j]
-      idx[k] = rightIdx[j]
-      inc j
-    inc k
+  if cmp == system.cmp[T]:
+    # Dont use system.cmp because it is slower
+    case order:
+      of Ascending: comparison b[i] <= a[j]
+      of Descending: comparison b[i] >= a[j]
+  else:
+    # use custom cmp()
+    comparison cmp(b[i], a[j]) * order <= 0
+  # copy rest of b:
+  while k < j:
+    a[k] <- b[i]
+    inc(k)
+    inc(i)
 
-  while i < len1:
-    myRun[k] = left[i]
-    idx[k] = leftIdx[i]
-    inc k
-    inc i
+proc mergeIndex[T](a, b: var openArray[T], bidx: var seq[int], lo, m, hi: int,
+                  cmp: proc (x, y: T): int {.closure.},
+                  order: SortOrder, idx: var seq[int]) {.effectsOf: cmp.} =
 
-  while j < len2:
-    myRun[k] = right[j]
-    idx[k] = rightIdx[j]
-    inc k
-    inc j
+  # Optimization: If max(left) <= min(right) there is nothing to do!
+  if cmp(a[m], a[m+1]) * order <= 0: return
+  var j = lo
+  # copy a[j..m] into b:
+  assert j <= m
 
-proc timSort*[T](arr: var openArray[T]) =
+  var bb = 0
+  while j <= m:
+    b[bb] <- a[j]
+    bidx[bb] <- idx[j]
+    inc(bb)
+    inc(j)
+  var i = 0
+  var k = lo
+
+  # copy proper element back:
+  template comparison(body: untyped) =
+    while k < j and j <= hi:
+      if body:
+        a[k] <- b[i]
+        idx[k] <- bidx[i]
+        inc(i)
+      else:
+        a[k] <- a[j]
+        idx[k] <- idx[j]
+        inc(j)
+      inc(k)
+
+  if cmp == system.cmp[T]:
+    # Dont use system.cmp because it is slower
+    case order:
+      of Ascending: comparison b[i] <= a[j]
+      of Descending: comparison b[i] >= a[j]
+  else:
+    # use custom cmp()
+    comparison cmp(b[i], a[j]) * order <= 0
+  # copy rest of b:
+  while k < j:
+    a[k] <- b[i]
+    idx[k] <- bidx[i]
+    inc(k)
+    inc(i)
+
+func timSort*[T](arr: var openArray[T], cmp: proc (x,
+    y: T): int {.closure.}, order = SortOrder.Ascending) {.effectsOf: cmp.} =
   ## Stable Sort, in-place based on the default python algorithm.
   ## Accepts sequence and array containers
   runnableExamples:
@@ -124,21 +180,25 @@ proc timSort*[T](arr: var openArray[T]) =
     assert arr2 == [-14, -14, -13, -7, -4, -2, 0, 0, 5, 7, 7, 8, 12, 15, 15]
 
   let n = arr.len
+  var b = newSeq[T](n)
   for i in countup(0, n - 1, RUN):
-    insertionSort(arr, i, min(i + RUN - 1, n-1))
+    insertionSort(arr, i, min(i + RUN - 1, n-1), cmp, order)
 
   var size: int = RUN
   while size < n:
     for left in countup(0, n-1, 2*size):
-      let
+      var
         mid = left + size - 1
         right = min(left + 2 * size - 1, n - 1)
       if mid < right:
-        merge(arr, left, mid, right)
+        merge(arr, b, left, mid, right, cmp, order)
     size *= 2
 
-proc timSort*[T](arr: var seq[seq[T]],
-    sortIndex: varargs[int] = 0) =
+proc timSort*[T](arr: var openArray[T], order = SortOrder.Ascending) =
+  timSort[T](arr, system.cmp[T], order)
+
+func timSort*[T](arr: var seq[seq[T]], cmp: proc (x, y: T): int {.closure.},
+    order: SortOrder, sortIndex: varargs[int]) {.effectsOf: cmp.} =
   ## Stable Sort, based on timSort.
   ## Accepts sequence containers
   ## Sorts based on column criteria
@@ -154,28 +214,37 @@ proc timSort*[T](arr: var seq[seq[T]],
     check arr4 == @[@[1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3], @[1, 2, 3, 4, 1, 2,
         3, 4, 5, 6, 7, 8], @[1, 4, 3, 2, 5, 6, 7, 8, 9, 10, 11, 12]]
 
-  var input = arr
-  var idx: seq[int]
-  for i in 0..<arr[0].len:
-    idx.add i
+
   let n = arr[0].len
+  var 
+    input = arr
+    idx = newSeq[int](n)
+    b = newSeq[T](n)
+    bidx = newSeq[int](n)
+  for i in 0..<arr[0].len:
+    idx[i] = i
 
   for col in countdown(sortIndex.len - 1, 0, 1):
     for i in countup(0, n - 1, RUN):
-      insertionSortIndex(arr[sortIndex[col]], i, min(i + RUN - 1, n-1), idx)
+      insertionSortIndex(arr[sortIndex[col]], i, min(i + RUN - 1, n-1), cmp,
+          order, idx)
 
     var size: int = RUN
     while size < n:
       for left in countup(0, n-1, 2*size):
-        let
+        var
           mid = left + size - 1
           right = min(left + 2 * size - 1, n - 1)
         if mid < right:
-          mergeIndex(arr[sortIndex[col]], left, mid, right, idx)
+          mergeIndex(arr[sortIndex[col]], b, bidx, left, mid, right, cmp,
+              order, idx)
       size *= 2
 
     #use idx[] to rebuild data
-    for index, row in idx:
-      for column in 0..<arr.len:
-        if col != column:
-          arr[column][index] = input[column][row]
+    for column in 0..<arr.len:
+      if sortIndex[col] == column: continue
+      for index, row in idx:
+        arr[column][index] = input[column][row]
+
+proc timSort*[T](arr: var seq[seq[T]], sortIndex: varargs[int] = [0]) =
+  timSort[T](arr, system.cmp[T], Ascending, sortIndex)
