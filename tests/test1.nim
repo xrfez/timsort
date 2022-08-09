@@ -7,7 +7,7 @@
 
 import unittest
 
-import timsort
+import timsort2
 
 import std/[random, algorithm]
 
