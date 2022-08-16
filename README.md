@@ -1,6 +1,6 @@
 # timsort
 
-`nimble install timsort2`
+`nimble install timsort2`  If it ever gets merged.
 
 This library has no dependencies other than the Nim standard library
 
